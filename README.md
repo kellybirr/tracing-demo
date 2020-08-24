@@ -116,7 +116,7 @@ $ mssql-cli -S 127.0.0.1,14330 -U sa -P <your-sa-password> -i 08-create-db.sql
 ```
 
 ### 9) Install Redis.
-This one is easy, as I'm only using Redis as a ephemeral cache and not persisting anything to disk. 
+This one is easy, as I'm only using Redis as an ephemeral cache and not persisting anything to disk. 
 
 ```bash
 $ kubectl apply -f 09-redis.yaml
@@ -157,11 +157,11 @@ $ mssql-cli -S 127.0.0.1,14330 -U sa -P <your-sa-password> -d GreetingDb -Q "SEL
 ```
 
 ## How do I make this work in my code?
-I know what you're thinking.  This example is intended for developers, but most of what you've read to this point has been; infrastructure, configuration and deployment.  We all love DevOps these days, don't we?!?
+I know what you're thinking.  This example is intended for developers, but most of what you've read to this point has been: infrastructure, configuration and deployment.  We all love DevOps these days, don't we?!?
 
-The good news is that adding OpenTelemetry to your code is simple and probably takes less time than the scratch   Kubernetes configuration does.
+The good news is that adding OpenTelemetry to your code is simple and probably takes less time than the scratch Kubernetes configuration does.
 
-*NOTE: My code uses [Serilog](https://serilog.net/) to enhance the default ASP.Net Core logging.  This is not required, I just like it better.  I especially love it when combined with [Seq](https://datalust.co/seq) by [Datalust](https://datalust.co/), which I can't recommend highly enough, and pairs beautifully with distributed tracing.  That's outside the scope of this example though.*
+*NOTE: My code uses [Serilog](https://serilog.net/) to enhance the default ASP.Net Core logging.  This is not a requirement for tracing, I just like it better.  I especially love it when combined with [Seq](https://datalust.co/seq) by [Datalust](https://datalust.co/).  I highly recommend the combination of Serilog and Seq for distributed systems.  For an excellent introduction to Serilog and Seq, check out [C# Logging with Serilog and Seq - Structured Logging Made Easy](https://www.youtube.com/watch?v=_iryZxv8Rxw) by IAmTimCorey on YouTube.*
 
 ### 1) Install Packages
 You need to install some OpenTelemetry NuGet packages into your project(s). The simplest way to see the packages needed is to look in my two sample service projects.
