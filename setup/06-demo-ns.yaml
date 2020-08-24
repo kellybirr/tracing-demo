@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo
+  annotations:
+    config.alpha.linkerd.io/trace-collector-service-account: linkerd-collector
+    config.linkerd.io/trace-collector: linkerd-collector.linkerd:55678
+    linkerd.io/inject: enabled

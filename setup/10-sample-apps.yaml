@@ -1,0 +1,137 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: greeter-rpc
+spec:
+  selector:
+    app: greeter-rpc
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+    name: greeter-webapi
+spec:
+    selector:
+      app: greeter-webapi
+    ports:
+      - protocol: TCP
+        port: 80
+        targetPort: 80
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trace-config
+data:
+  format: B3m
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: greeter-rpc
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: greeter-rpc
+  template:
+    metadata:
+      labels:
+        app: greeter-rpc
+    spec:
+      imagePullSecrets:
+        - name: regcred
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        kubernetes.io/os: linux
+      containers:
+        - name: greeter-rpc
+          image: kellybirr/tracing-demo:grpc
+          imagePullPolicy: Always
+          env:
+            - name: Passwords__Sql
+              valueFrom:
+                secretKeyRef:
+                  name: mssql
+                  key: SA_PASSWORD  
+            - name: Tracing__Format
+              valueFrom:
+                configMapKeyRef:
+                  name: trace-config
+                  key: format
+          ports:
+            - containerPort: 80
+              protocol: TCP
+              name: grpc
+          livenessProbe:
+            initialDelaySeconds: 60
+            periodSeconds: 60
+            timeoutSeconds: 10
+            exec:
+              command: ["/bin/grpc_health_probe", "-addr=localhost:80"]
+          readinessProbe:
+            initialDelaySeconds: 15
+            periodSeconds: 60
+            timeoutSeconds: 10
+            exec:
+              command: ["/bin/grpc_health_probe", "-addr=localhost:80"]
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: greeter-webapi
+  spec:
+    replicas: 1
+    revisionHistoryLimit: 2
+    selector:
+      matchLabels:
+        app: greeter-webapi
+    template:
+      metadata:
+        labels:
+          app: greeter-webapi
+      spec:
+        nodeSelector:
+          kubernetes.io/arch: amd64
+          kubernetes.io/os: linux
+        containers:
+          - name: greeter-webapi
+            image: kellybirr/tracing-demo:webapi
+            imagePullPolicy: Always
+            env:
+              - name: Tracing__Format
+                valueFrom:
+                  configMapKeyRef:
+                    name: trace-config
+                    key: format
+            ports:
+              - containerPort: 80
+                name: http
+            livenessProbe:
+              initialDelaySeconds: 60
+              periodSeconds: 60
+              timeoutSeconds: 10
+              httpGet:
+                path: /healthz
+                port: 80
+            readinessProbe:
+              initialDelaySeconds: 15
+              periodSeconds: 60
+              timeoutSeconds: 10
+              httpGet:
+                path: /healthz
+                port: 80
+            resources:
+              limits:
+                cpu: 500m
+                memory: 512Mi
+---

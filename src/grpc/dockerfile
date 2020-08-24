@@ -1,0 +1,21 @@
+# Build environment image
+FROM mcr.microsoft.com/dotnet/core/sdk:3.1 as build-env
+WORKDIR /build
+COPY . .
+
+# Build & Publish
+RUN dotnet publish grpc.csproj --no-cache -c Release -r linux-x64 --self-contained false -o /app
+
+# Create container image from publish output
+FROM mcr.microsoft.com/dotnet/core/aspnet:3.1 as runtime-env
+
+WORKDIR /app
+COPY --from=build-env /app .
+
+# Add the health check probe executable so that we get alive and readiness checks
+RUN apt-get update && apt-get install -y wget
+RUN GRPC_HEALTH_PROBE_VERSION=v0.3.2 && \
+    wget -qO/bin/grpc_health_probe https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/${GRPC_HEALTH_PROBE_VERSION}/grpc_health_probe-linux-amd64 && \
+    chmod +x /bin/grpc_health_probe
+
+ENTRYPOINT ["dotnet", "grpc.dll"]

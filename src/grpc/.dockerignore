@@ -1,0 +1,4 @@
+**/bin
+**/obj
+dockerfile
+appsettings.Development.json
