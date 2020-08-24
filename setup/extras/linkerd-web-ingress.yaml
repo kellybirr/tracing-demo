@@ -1,0 +1,21 @@
+# See: https://linkerd.io/2/tasks/exposing-dashboard/
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: web-ingress
+  namespace: linkerd
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/upstream-vhost: $service_name.$namespace.svc.cluster.local:8084
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Origin "";
+      proxy_hide_header l5d-remote-ip;
+      proxy_hide_header l5d-server-id;
+spec:
+  rules:
+  - host: linkerd.greeter.demo
+    http:
+      paths:
+      - backend:
+          serviceName: linkerd-web
+          servicePort: 8084
