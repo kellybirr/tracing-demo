@@ -365,6 +365,13 @@ Request Headers:
 
 These are all the HTTP headers that Nginx sent to your Pod, simply echoed back to you.  The ones that start with `x-b3-*` are the relevant headers for tracing.  See [openzipkin/b3-propagation](https://github.com/openzipkin/b3-propagation) on GitHub for a lot more detail.
 
+## Easter Egg
+If you look carefully at the screenshot, you'll notice the Redis operation `SETX` is nested below the Redis `GET` as a child of the `Check-Cache` span.  It should be nested at the very bottom, under the `Add-To-Cache` span.  OpenTelemetry is still in Beta at the time of this writing.  This is a bug in the Redis tracing support.
+
+I've put in a PR to OpenTelemetry-DotNet to fix the issue:
+
+https://github.com/open-telemetry/opentelemetry-dotnet/pull/1153
+
 ## Wrapping up
 There are a few ways to get this kind of capability, and many different tools and techniques. This is simply my recipe.  
 
