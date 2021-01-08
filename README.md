@@ -39,7 +39,7 @@ Check out "https://linkerd.io/2/getting-started" for a detailed guide on Linkerd
 This consists of [OpenCensus Collector](https://opencensus.io/service/components/collector) and [Jaeger](https://www.jaegertracing.io).
 
 ```bash
-$ linkerd upgrade --addon-config 02-linkerd-addon.yaml | kubectl apply -f -
+$ linkerd upgrade --config 02-linkerd-addon.yaml | kubectl apply -f -
 ```
 See "https://linkerd.io/2/tasks/distributed-tracing" for more information.
 
@@ -183,57 +183,57 @@ Again, the simple solution is to look in the samples.
 
 The important bits to pay attention to are:
 
+
+
 ```csharp
 // create and register an activity source
 var activitySource = new ActivitySource(Program.Name);
 services.AddSingleton(activitySource);
-
-// Configure OpenTelemetry
-services.AddOpenTelemetry(builder =>
-{
-	// register the activity source
-	builder.AddActivitySource(activitySource.Name);
-...
 ```
-This sets up the OpenTelemetry framework and registers an `ActivitySource`.  The Activity Source is the key to having control of your internal tracing detail. The framework will largely take care of RPC tracing once configured properly.
+
+This creates and registers an `ActivitySource` with DI.  The Activity Source is the key to having control of your internal tracing detail. The framework will largely take care of RPC tracing once configured properly.
 
 Don't worry about `Program.Name`, that was a convenient place for me to put a constant that I'll use a few times. 
 
 ```csharp
 // TextFormat Defaults to W3C - Enable B3 via configuration
 string tracingFormat = Configuration["Tracing:Format"]?.ToLowerInvariant();
-
-// Add ASP.Net Core Request Handling
-builder.AddAspNetCoreInstrumentation(options =>
-{
-    if (tracingFormat == "b3m") // B3 (multi) headers come from Nginx
-        options.TextFormat = new B3Format(singleHeader: false);
-    else if (tracingFormat == "b3s")
-        options.TextFormat = new B3Format(singleHeader: true);
-});
-
+if (tracingFormat == "b3m") // B3 (multi) headers come from Nginx
+    OpenTelemetry.Sdk.SetDefaultTextMapPropagator(new B3Propagator(singleHeader: false));
+else if (tracingFormat == "b3s")
+    OpenTelemetry.Sdk.SetDefaultTextMapPropagator(new B3Propagator(singleHeader: true));
 ```
-This adds the automatic handling of incoming ASP.Net Core Requests (MVC, WebApi & gRPC) and will accept inbound trace headers.
 
-The bit about `tracingFormat` that sets `options.TextFormat` is how we configure OpenTelemetry.Net to use B3*m* headers instead of the default W3C headers.  This is required to work with Nginx and Linkerd.
+This is how we configure OpenTelemetry.Net to use B3*m* headers instead of the default W3C headers.  This is required to work with Nginx and Linkerd.
 
 ```csharp
-// Add HttpClient & gRPC Propagation (order matters for gRPC to support B3 format)
-builder.AddHttpClientInstrumentation(options =>
+// Configure OpenTelemetry
+services.AddOpenTelemetryTracing(builder =>
 {
-    if (tracingFormat == "b3m") // Send B3 headers downstream (for Linkerd)
-        options.TextFormat = new B3Format(singleHeader: false);
-    else if (tracingFormat == "b3s")
-        options.TextFormat = new B3Format(singleHeader: true);
-})
-.AddGrpcClientInstrumentation();
+    // register the activity source
+    builder.AddSource(activitySource.Name);
+
+    // Add ASP.Net Core Request Handling
+    builder.AddAspNetCoreInstrumentation(options =>
+    {
+       options.EnableGrpcAspNetCoreSupport = true;
+    });
+...
+```
+This sets up the OpenTelemetry framework and registers our `ActivitySource`. This also adds the automatic handling of incoming ASP.Net Core Requests (MVC, WebApi & gRPC) and will accept inbound trace headers.
+
+
+```csharp
+// Add gRPC Propagation
+builder.AddGrpcClientInstrumentation();
+
 ```
 
-This is only in the WebApi and tells the framework to propagate child spans via HTTP Headers on outbound requests with HttpClient and GrpcClient.  The order matters here.  We have to tell HttpClient (used internally by GrpcClient) to use B3*m* headers.  We do this just like we did with ASP.Net request handling (above).  We need it to send out B3*m* headers instead of W3C headers to be seen by the Linkerd Proxy.
+This is only in the WebApi and tells the framework to propagate child spans via HTTP Headers on outbound requests with GrpcClient.
 
 ```csharp
 // add automatic instrumentation for Sql Server
-builder.AddSqlClientDependencyInstrumentation(options =>
+builder.AddSqlClientInstrumentation(options =>
 {
     options.SetTextCommandContent = true;   // probably not in production?
     options.EnableConnectionLevelAttributes = true;
@@ -249,7 +249,7 @@ These bits are only in the gRPC service, since only it talks to Redis and SQL Se
 string zipkinUrl = Configuration.GetConnectionString("Telemetry");
 if (!string.IsNullOrEmpty(zipkinUrl))
 {
-    builder.UseZipkinExporter(options =>
+    builder.AddZipkinExporter(options =>
     {
         options.ServiceName = Program.Name;
         options.Endpoint = new Uri(zipkinUrl);
@@ -258,7 +258,7 @@ if (!string.IsNullOrEmpty(zipkinUrl))
 
 // enable console output by configuration
 if (Configuration.GetValue<bool>("Tracing:Console", false))
-    builder.UseConsoleExporter();
+    builder.AddConsoleExporter();
 ```
 Finally, this is in both services.  This is how we configure OpenTelemetry to write the spans out to the Zipkin receiver and optionally, the console.  The [appsettings.json](src/webapi/appsettings.json) files in both service projects have the default Telemetry connection string you'll use with Linkerd.
 
@@ -364,13 +364,6 @@ Request Headers:
 ```
 
 These are all the HTTP headers that Nginx sent to your Pod, simply echoed back to you.  The ones that start with `x-b3-*` are the relevant headers for tracing.  See [openzipkin/b3-propagation](https://github.com/openzipkin/b3-propagation) on GitHub for a lot more detail.
-
-## Easter Egg
-If you look carefully at the screenshot, you'll notice the Redis operation `SETX` is nested below the Redis `GET` as a child of the `Check-Cache` span.  It should be nested at the very bottom, under the `Add-To-Cache` span.  OpenTelemetry is still in Beta at the time of this writing.  This is a bug in the Redis tracing support.
-
-I've put in a PR to OpenTelemetry-DotNet to fix the issue:
-
-https://github.com/open-telemetry/opentelemetry-dotnet/pull/1153
 
 ## Wrapping up
 There are a few ways to get this kind of capability, and many different tools and techniques. This is simply my recipe.  

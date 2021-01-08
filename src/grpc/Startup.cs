@@ -42,26 +42,27 @@ namespace TracingDemo.GrpcService
             var activitySource = new ActivitySource(Program.Name);
             services.AddSingleton(activitySource);
 
+            // TextFormat Defaults to W3C - Enable B3 via configuration
+            string tracingFormat = Configuration["Tracing:Format"]?.ToLowerInvariant();
+            if (tracingFormat == "b3m") // B3 (multi) headers come from Nginx
+                OpenTelemetry.Sdk.SetDefaultTextMapPropagator(new B3Propagator(singleHeader: false));
+            else if (tracingFormat == "b3s")
+                OpenTelemetry.Sdk.SetDefaultTextMapPropagator(new B3Propagator(singleHeader: true));
+
             // Configure OpenTelemetry
-            services.AddOpenTelemetry(builder =>
+            services.AddOpenTelemetryTracing(builder =>
             {
                 // register the activity source
-                builder.AddActivitySource(activitySource.Name);
-
-                // TextFormat Defaults to W3C - Enable B3 via configuration
-                string tracingFormat = Configuration["Tracing:Format"]?.ToLowerInvariant();
+                builder.AddSource(activitySource.Name);
 
                 // Add ASP.Net Core Request Handling
                 builder.AddAspNetCoreInstrumentation(options =>
                 {
-                    if (tracingFormat == "b3m") // B3 (multi) headers come from Nginx
-                        options.TextFormat = new B3Format(singleHeader: false);
-                    else if (tracingFormat == "b3s")
-                        options.TextFormat = new B3Format(singleHeader: true);
+                    options.EnableGrpcAspNetCoreSupport = true;
                 });
 
                 // add automatic instrumentation for Sql Server
-                builder.AddSqlClientDependencyInstrumentation(options =>
+                builder.AddSqlClientInstrumentation(options =>
                 {
                     options.SetTextCommandContent = true;   // probably not in production?
                     options.EnableConnectionLevelAttributes = true;
@@ -74,7 +75,7 @@ namespace TracingDemo.GrpcService
                 string zipkinUrl = Configuration.GetConnectionString("Telemetry");
                 if (!string.IsNullOrEmpty(zipkinUrl))
                 {
-                    builder.UseZipkinExporter(options =>
+                    builder.AddZipkinExporter(options =>
                     {
                         options.ServiceName = Program.Name;
                         options.Endpoint = new Uri(zipkinUrl);
@@ -83,7 +84,7 @@ namespace TracingDemo.GrpcService
 
                 // enable console output by configuration
                 if (Configuration.GetValue<bool>("Tracing:Console", false))
-                    builder.UseConsoleExporter();
+                    builder.AddConsoleExporter();
             });
 
         }
